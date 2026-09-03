@@ -12,21 +12,20 @@ export async function GET() {
   return NextResponse.json({ releases: data });
 }
 
-// Вызывается ПОСЛЕ того, как файл уже реально загружен в Storage напрямую
-// из браузера (см. /upload-url) — тут только записываем метаданные.
+// Вызывается ПОСЛЕ того, как файл уже реально загружен в Vercel Blob
+// напрямую из браузера (см. /blob-upload) — тут только записываем
+// метаданные, download_url уже готовый публичный URL от Vercel Blob.
 export async function POST(req: NextRequest) {
-  const { version, path, sha256, changelog } = await req.json();
-  if (!version || !path || !sha256) {
-    return NextResponse.json({ error: "version, path и sha256 обязательны" }, { status: 400 });
+  const { version, download_url, sha256, changelog } = await req.json();
+  if (!version || !download_url || !sha256) {
+    return NextResponse.json({ error: "version, download_url и sha256 обязательны" }, { status: 400 });
   }
 
   const sb = supabaseAdmin();
-  const { data: publicUrlData } = sb.storage.from("releases").getPublicUrl(path);
-
   const { error } = await sb.from("app_releases").insert({
     version,
-    storage_path: path,
-    download_url: publicUrlData.publicUrl,
+    storage_path: download_url, // Vercel Blob сам управляет путём, храним итоговый URL и тут для справки
+    download_url,
     sha256,
     changelog: changelog || "",
   });
@@ -35,5 +34,5 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: msg }, { status: 400 });
   }
 
-  return NextResponse.json({ ok: true, download_url: publicUrlData.publicUrl });
+  return NextResponse.json({ ok: true, download_url });
 }

@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
-import * as tus from "tus-js-client";
+import { upload } from "@vercel/blob/client";
 
 type ClientRow = {
   id: string;
@@ -416,55 +416,18 @@ function ReleasesPanel() {
       setStatus("Считаю SHA-256...");
       const sha256 = await sha256Hex(file);
 
-      setStatus("Запрашиваю ссылку на загрузку...");
-      const urlRes = await fetch("/api/admin/releases/upload-url", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ filename: file.name }),
-      });
-      const urlData = await urlRes.json();
-      if (!urlRes.ok) { setStatus(urlData.error || "Ошибка"); return; }
-
       setStatus("Загружаю файл...");
-      // Стандартный upload/uploadToSignedUrl у Supabase официально не
-      // рекомендован для файлов больше 6 МБ — зависает без ошибки и без
-      // прогресса. TUS (resumable upload) — их же официально
-      // рекомендованный протокол именно под такие файлы, плюс даёт честный
-      // прогресс по чанкам.
-      const projectRef = process.env.NEXT_PUBLIC_SUPABASE_URL!.replace("https://", "").split(".")[0];
-
-      await new Promise<void>((resolve, reject) => {
-        const upload = new tus.Upload(file, {
-          endpoint: `https://${projectRef}.storage.supabase.co/storage/v1/upload/resumable`,
-          retryDelays: [0, 3000, 5000, 10000, 20000],
-          headers: {
-            apikey: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-            "x-signature": urlData.token,
-            "x-upsert": "true",
-          },
-          uploadDataDuringCreation: true,
-          removeFingerprintOnSuccess: true,
-          metadata: {
-            bucketName: "releases",
-            objectName: urlData.path,
-            contentType: file.type || "application/octet-stream",
-          },
-          chunkSize: 6 * 1024 * 1024, // Supabase требует ровно 6 МБ на чанк
-          onError: reject,
-          onProgress: (sent, total) => setProgress(Math.round((sent / total) * 100)),
-          onSuccess: () => resolve(),
-        });
-        upload.findPreviousUploads().then((prev) => {
-          if (prev.length) upload.resumeFromPreviousUpload(prev[0]);
-          upload.start();
-        });
+      const blob = await upload(file.name, file, {
+        access: "public",
+        handleUploadUrl: "/api/admin/releases/blob-upload",
+        onUploadProgress: (event) => setProgress(Math.round(event.percentage)),
       });
 
       setStatus("Сохраняю запись о релизе...");
       const metaRes = await fetch("/api/admin/releases", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ version, path: urlData.path, sha256, changelog }),
+        body: JSON.stringify({ version, download_url: blob.url, sha256, changelog }),
       });
       const metaData = await metaRes.json();
       if (!metaRes.ok) { setStatus(metaData.error || "Ошибка"); return; }
