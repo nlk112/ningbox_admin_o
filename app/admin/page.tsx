@@ -2,7 +2,6 @@
 
 import { useEffect, useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
-import { upload as uploadToBlob } from "@vercel/blob/client";
 
 type ClientRow = {
   id: string;
@@ -416,19 +415,28 @@ function ReleasesPanel() {
       setStatus("Считаю SHA-256...");
       const sha256 = await sha256Hex(file);
 
-      setStatus("Загружаю файл...");
-      const blob = await uploadToBlob(file.name, file, {
-        access: "public",
-        handleUploadUrl: "/api/admin/releases/blob-upload",
-        multipart: true,
-        onUploadProgress: (event: { percentage: number }) => setProgress(Math.round(event.percentage)),
+      setStatus("Запрашиваю ссылку на загрузку...");
+      const urlRes = await fetch("/api/admin/releases/upload-url", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ filename: file.name }),
       });
+      const urlData = await urlRes.json();
+      if (!urlRes.ok) { setStatus(urlData.error || "Ошибка"); return; }
+
+      setStatus("Загружаю файл в Storage...");
+      const { supabaseBrowser } = await import("@/lib/supabaseBrowser");
+      const sb = supabaseBrowser();
+      const { error: upErr } = await sb.storage
+        .from("releases")
+        .uploadToSignedUrl(urlData.path, urlData.token, file);
+      if (upErr) { setStatus(upErr.message); return; }
 
       setStatus("Сохраняю запись о релизе...");
       const metaRes = await fetch("/api/admin/releases", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ version, download_url: blob.url, sha256, changelog }),
+        body: JSON.stringify({ version, path: urlData.path, sha256, changelog }),
       });
       const metaData = await metaRes.json();
       if (!metaRes.ok) { setStatus(metaData.error || "Ошибка"); return; }
