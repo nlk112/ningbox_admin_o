@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
+import * as tus from "tus-js-client";
 
 type ClientRow = {
   id: string;
@@ -430,7 +431,6 @@ function ReleasesPanel() {
       // прогресса. TUS (resumable upload) — их же официально
       // рекомендованный протокол именно под такие файлы, плюс даёт честный
       // прогресс по чанкам.
-      const { default: tus } = await import("tus-js-client");
       const projectRef = process.env.NEXT_PUBLIC_SUPABASE_URL!.replace("https://", "").split(".")[0];
 
       await new Promise<void>((resolve, reject) => {
