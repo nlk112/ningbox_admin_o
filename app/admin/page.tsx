@@ -396,6 +396,7 @@ function ReleasesPanel() {
   const [changelog, setChangelog] = useState("");
   const [file, setFile] = useState<File | null>(null);
   const [status, setStatus] = useState("");
+  const [progress, setProgress] = useState(0);
   const [busy, setBusy] = useState(false);
 
   const load = useCallback(async () => {
@@ -409,6 +410,7 @@ function ReleasesPanel() {
   async function upload() {
     if (!file || !version.trim()) { setStatus("Укажи версию и выбери файл"); return; }
     setBusy(true);
+    setProgress(0);
     try {
       setStatus("Считаю SHA-256...");
       const sha256 = await sha256Hex(file);
@@ -422,13 +424,40 @@ function ReleasesPanel() {
       const urlData = await urlRes.json();
       if (!urlRes.ok) { setStatus(urlData.error || "Ошибка"); return; }
 
-      setStatus("Загружаю файл в Storage...");
-      const { supabaseBrowser } = await import("@/lib/supabaseBrowser");
-      const sb = supabaseBrowser();
-      const { error: upErr } = await sb.storage
-        .from("releases")
-        .uploadToSignedUrl(urlData.path, urlData.token, file);
-      if (upErr) { setStatus(upErr.message); return; }
+      setStatus("Загружаю файл...");
+      // Стандартный upload/uploadToSignedUrl у Supabase официально не
+      // рекомендован для файлов больше 6 МБ — зависает без ошибки и без
+      // прогресса. TUS (resumable upload) — их же официально
+      // рекомендованный протокол именно под такие файлы, плюс даёт честный
+      // прогресс по чанкам.
+      const { default: tus } = await import("tus-js-client");
+      const projectRef = process.env.NEXT_PUBLIC_SUPABASE_URL!.replace("https://", "").split(".")[0];
+
+      await new Promise<void>((resolve, reject) => {
+        const upload = new tus.Upload(file, {
+          endpoint: `https://${projectRef}.storage.supabase.co/storage/v1/upload/resumable`,
+          retryDelays: [0, 3000, 5000, 10000, 20000],
+          headers: {
+            authorization: `Bearer ${urlData.token}`,
+            "x-upsert": "true",
+          },
+          uploadDataDuringCreation: true,
+          removeFingerprintOnSuccess: true,
+          metadata: {
+            bucketName: "releases",
+            objectName: urlData.path,
+            contentType: file.type || "application/octet-stream",
+          },
+          chunkSize: 6 * 1024 * 1024, // Supabase требует ровно 6 МБ на чанк
+          onError: reject,
+          onProgress: (sent, total) => setProgress(Math.round((sent / total) * 100)),
+          onSuccess: () => resolve(),
+        });
+        upload.findPreviousUploads().then((prev) => {
+          if (prev.length) upload.resumeFromPreviousUpload(prev[0]);
+          upload.start();
+        });
+      });
 
       setStatus("Сохраняю запись о релизе...");
       const metaRes = await fetch("/api/admin/releases", {
@@ -442,6 +471,8 @@ function ReleasesPanel() {
       setStatus("Готово!");
       setVersion(""); setChangelog(""); setFile(null);
       load();
+    } catch (err: any) {
+      setStatus("Ошибка загрузки: " + (err?.message || String(err)));
     } finally {
       setBusy(false);
     }
@@ -462,7 +493,12 @@ function ReleasesPanel() {
       <button className="btn btn-primary" onClick={upload} disabled={busy} style={{ alignSelf: "flex-start" }}>
         {busy ? "Загружаю..." : "Опубликовать релиз"}
       </button>
-      {status && <div style={{ fontSize: 13, color: "var(--text-dim)" }}>{status}</div>}
+      {busy && progress > 0 && (
+        <div style={{ background: "var(--panel-2)", borderRadius: 999, height: 6, overflow: "hidden" }}>
+          <div style={{ background: "var(--accent)", height: "100%", width: `${progress}%`, transition: "width 0.2s" }} />
+        </div>
+      )}
+      {status && <div style={{ fontSize: 13, color: "var(--text-dim)" }}>{status}{busy && progress > 0 ? ` (${progress}%)` : ""}</div>}
 
       <div style={{ height: 1, background: "rgba(255,255,255,0.08)", margin: "6px 0" }} />
 
