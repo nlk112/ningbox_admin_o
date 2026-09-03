@@ -11,13 +11,12 @@ function addDuration(base: Date, amount: number, unit: Unit): Date {
   return d;
 }
 
-export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const { id } = await params;
+export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
   const body = await req.json();
   const sb = supabaseAdmin();
 
   if (body.unlimited === true) {
-    const { error } = await sb.from("clients").update({ expires_at: null, is_active: true }).eq("id", id);
+    const { error } = await sb.from("clients").update({ expires_at: null, is_active: true }).eq("id", params.id);
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
     return NextResponse.json({ ok: true, expires_at: null });
   }
@@ -34,7 +33,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   const { data: current, error: fetchErr } = await sb
     .from("clients")
     .select("expires_at")
-    .eq("id", id)
+    .eq("id", params.id)
     .single();
   if (fetchErr) return NextResponse.json({ error: fetchErr.message }, { status: 500 });
 
@@ -46,7 +45,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   const { error } = await sb
     .from("clients")
     .update({ expires_at: newExpiry.toISOString(), is_active: true })
-    .eq("id", id);
+    .eq("id", params.id);
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
   return NextResponse.json({ ok: true, expires_at: newExpiry.toISOString() });

@@ -37,6 +37,7 @@ function formatExpiry(expiresAt: string | null): { text: string; warn: boolean }
 
 export default function AdminPage() {
   const router = useRouter();
+  const [topTab, setTopTab] = useState<"clients" | "releases" | "notifications">("clients");
   const [clients, setClients] = useState<ClientRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [showCreate, setShowCreate] = useState(false);
@@ -50,10 +51,11 @@ export default function AdminPage() {
   }, []);
 
   useEffect(() => {
+    if (topTab !== "clients") return;
     load();
     const t = setInterval(load, 20000); // онлайн-статус обновляем сам собой
     return () => clearInterval(t);
-  }, [load]);
+  }, [load, topTab]);
 
   async function logout() {
     await fetch("/api/logout", { method: "POST" });
@@ -65,11 +67,21 @@ export default function AdminPage() {
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 24 }}>
         <div style={{ fontSize: 20, fontWeight: 700 }}>Ningbox Admin</div>
         <div style={{ display: "flex", gap: 10 }}>
-          <button className="btn btn-primary" onClick={() => setShowCreate(true)}>+ Клиент</button>
+          {topTab === "clients" && <button className="btn btn-primary" onClick={() => setShowCreate(true)}>+ Клиент</button>}
           <button className="btn btn-secondary" onClick={logout}>Выйти</button>
         </div>
       </div>
 
+      <div style={{ display: "flex", gap: 8, marginBottom: 20 }}>
+        <button className={`btn ${topTab === "clients" ? "btn-primary" : "btn-secondary"}`} onClick={() => setTopTab("clients")}>Клиенты</button>
+        <button className={`btn ${topTab === "releases" ? "btn-primary" : "btn-secondary"}`} onClick={() => setTopTab("releases")}>Релизы</button>
+        <button className={`btn ${topTab === "notifications" ? "btn-primary" : "btn-secondary"}`} onClick={() => setTopTab("notifications")}>Уведомления</button>
+      </div>
+
+      {topTab === "releases" && <ReleasesPanel />}
+      {topTab === "notifications" && <NotificationsPanel />}
+
+      {topTab === "clients" && (
       <div className="card">
         {loading ? (
           <div style={{ color: "var(--text-dim)", padding: 20 }}>Загрузка...</div>
@@ -113,6 +125,7 @@ export default function AdminPage() {
           </table>
         )}
       </div>
+      )}
 
       {showCreate && (
         <CreateClientModal
@@ -179,6 +192,9 @@ function ClientDetailModal({ client, onClose, onChanged }: { client: ClientRow; 
   const [tab, setTab] = useState<"subscription" | "logs">("subscription");
   const [amount, setAmount] = useState("30");
   const [unit, setUnit] = useState<"hours" | "days" | "months">("days");
+  const [limitGB, setLimitGB] = useState(
+    client.traffic_limit_bytes == null ? "" : String(client.traffic_limit_bytes / 1024 / 1024 / 1024)
+  );
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState("");
 
@@ -248,6 +264,24 @@ function ClientDetailModal({ client, onClose, onChanged }: { client: ClientRow; 
     }
   }
 
+  async function saveTrafficLimit() {
+    setBusy(true);
+    setMsg("");
+    try {
+      const bytes = limitGB.trim() === "" ? null : Math.round(parseFloat(limitGB) * 1024 * 1024 * 1024);
+      const res = await fetch(`/api/admin/clients/${client.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ traffic_limit_bytes: bytes }),
+      });
+      if (!res.ok) { const d = await res.json(); setMsg(d.error || "Ошибка"); return; }
+      setMsg("Лимит трафика обновлён");
+      onChanged();
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function deleteClient() {
     if (!confirm(`Удалить клиента ${client.username || client.email}? Это необратимо.`)) return;
     setBusy(true);
@@ -284,6 +318,20 @@ function ClientDetailModal({ client, onClose, onChanged }: { client: ClientRow; 
             </div>
             <button className="btn btn-secondary" onClick={setUnlimited} disabled={busy}>Сделать бессрочным</button>
             <div style={{ height: 1, background: "rgba(255,255,255,0.08)", margin: "4px 0" }} />
+            <div style={{ display: "flex", gap: 8 }}>
+              <input
+                className="input"
+                style={{ flex: 1 }}
+                type="number"
+                min={0}
+                step="0.1"
+                placeholder="Лимит трафика, ГБ (пусто = безлимит)"
+                value={limitGB}
+                onChange={(e) => setLimitGB(e.target.value)}
+              />
+              <button className="btn btn-primary" onClick={saveTrafficLimit} disabled={busy}>Сохранить</button>
+            </div>
+            <div style={{ height: 1, background: "rgba(255,255,255,0.08)", margin: "4px 0" }} />
             <button className="btn btn-secondary" onClick={toggleActive} disabled={busy}>
               {client.is_active ? "Отключить клиента" : "Включить клиента"}
             </button>
@@ -317,6 +365,210 @@ function ClientDetailModal({ client, onClose, onChanged }: { client: ClientRow; 
           <button className="btn btn-secondary" onClick={onClose}>Закрыть</button>
         </div>
       </div>
+    </div>
+  );
+}
+
+// ============================================================
+// Релизы — загрузка .exe напрямую в Supabase Storage (минуя тело
+// запроса Vercel-функции, у которого маленький лимит) через подписанную
+// ссылку, плюс SHA-256 считаем в браузере перед отправкой.
+// ============================================================
+
+type ReleaseRow = {
+  id: number;
+  version: string;
+  download_url: string;
+  sha256: string;
+  changelog: string;
+  created_at: string;
+};
+
+async function sha256Hex(file: File): Promise<string> {
+  const buf = await file.arrayBuffer();
+  const hashBuf = await crypto.subtle.digest("SHA-256", buf);
+  return Array.from(new Uint8Array(hashBuf)).map((b) => b.toString(16).padStart(2, "0")).join("");
+}
+
+function ReleasesPanel() {
+  const [releases, setReleases] = useState<ReleaseRow[]>([]);
+  const [version, setVersion] = useState("");
+  const [changelog, setChangelog] = useState("");
+  const [file, setFile] = useState<File | null>(null);
+  const [status, setStatus] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  const load = useCallback(async () => {
+    const res = await fetch("/api/admin/releases");
+    const data = await res.json();
+    setReleases(data.releases || []);
+  }, []);
+
+  useEffect(() => { load(); }, [load]);
+
+  async function upload() {
+    if (!file || !version.trim()) { setStatus("Укажи версию и выбери файл"); return; }
+    setBusy(true);
+    try {
+      setStatus("Считаю SHA-256...");
+      const sha256 = await sha256Hex(file);
+
+      setStatus("Запрашиваю ссылку на загрузку...");
+      const urlRes = await fetch("/api/admin/releases/upload-url", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ filename: file.name }),
+      });
+      const urlData = await urlRes.json();
+      if (!urlRes.ok) { setStatus(urlData.error || "Ошибка"); return; }
+
+      setStatus("Загружаю файл в Storage...");
+      const { supabaseBrowser } = await import("@/lib/supabaseBrowser");
+      const sb = supabaseBrowser();
+      const { error: upErr } = await sb.storage
+        .from("releases")
+        .uploadToSignedUrl(urlData.path, urlData.token, file);
+      if (upErr) { setStatus(upErr.message); return; }
+
+      setStatus("Сохраняю запись о релизе...");
+      const metaRes = await fetch("/api/admin/releases", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ version, path: urlData.path, sha256, changelog }),
+      });
+      const metaData = await metaRes.json();
+      if (!metaRes.ok) { setStatus(metaData.error || "Ошибка"); return; }
+
+      setStatus("Готово!");
+      setVersion(""); setChangelog(""); setFile(null);
+      load();
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="card" style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+      <div style={{ fontWeight: 700 }}>Новый релиз</div>
+      <input className="input" placeholder="Версия (например 1.2.0)" value={version} onChange={(e) => setVersion(e.target.value)} />
+      <textarea
+        className="input"
+        style={{ minHeight: 70, resize: "vertical", fontFamily: "inherit" }}
+        placeholder="Что поправили в этой версии..."
+        value={changelog}
+        onChange={(e) => setChangelog(e.target.value)}
+      />
+      <input type="file" accept=".exe" onChange={(e) => setFile(e.target.files?.[0] || null)} />
+      <button className="btn btn-primary" onClick={upload} disabled={busy} style={{ alignSelf: "flex-start" }}>
+        {busy ? "Загружаю..." : "Опубликовать релиз"}
+      </button>
+      {status && <div style={{ fontSize: 13, color: "var(--text-dim)" }}>{status}</div>}
+
+      <div style={{ height: 1, background: "rgba(255,255,255,0.08)", margin: "6px 0" }} />
+
+      <div style={{ fontWeight: 700 }}>История релизов</div>
+      {releases.map((r) => (
+        <div key={r.id} style={{ background: "var(--panel-2)", borderRadius: 8, padding: 12 }}>
+          <div style={{ display: "flex", justifyContent: "space-between" }}>
+            <b>{r.version}</b>
+            <span style={{ color: "var(--text-dim)", fontSize: 12 }}>{new Date(r.created_at).toLocaleString("ru-RU")}</span>
+          </div>
+          {r.changelog && <div style={{ fontSize: 13, color: "var(--text-dim)", marginTop: 4 }}>{r.changelog}</div>}
+        </div>
+      ))}
+      {releases.length === 0 && <div style={{ color: "var(--text-dim)" }}>Релизов пока нет</div>}
+    </div>
+  );
+}
+
+// ============================================================
+// Уведомления — тот же баннер, что и под "вышла новая версия", но для
+// произвольных информационных объявлений с настраиваемым временем жизни.
+// ============================================================
+
+type NotificationRow = {
+  id: number;
+  title: string;
+  body: string;
+  duration_hours: number | null;
+  created_at: string;
+};
+
+function NotificationsPanel() {
+  const [items, setItems] = useState<NotificationRow[]>([]);
+  const [title, setTitle] = useState("");
+  const [body, setBody] = useState("");
+  const [duration, setDuration] = useState("24"); // часы; "" = бессрочно
+  const [busy, setBusy] = useState(false);
+
+  const load = useCallback(async () => {
+    const res = await fetch("/api/admin/notifications");
+    const data = await res.json();
+    setItems(data.notifications || []);
+  }, []);
+
+  useEffect(() => { load(); }, [load]);
+
+  async function create() {
+    if (!title.trim()) return;
+    setBusy(true);
+    try {
+      await fetch("/api/admin/notifications", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          title,
+          body,
+          duration_hours: duration === "" ? null : Number(duration),
+        }),
+      });
+      setTitle(""); setBody("");
+      load();
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function remove(id: number) {
+    await fetch(`/api/admin/notifications/${id}`, { method: "DELETE" });
+    load();
+  }
+
+  return (
+    <div className="card" style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+      <div style={{ fontWeight: 700 }}>Новое уведомление</div>
+      <input className="input" placeholder="Заголовок" value={title} onChange={(e) => setTitle(e.target.value)} />
+      <textarea
+        className="input"
+        style={{ minHeight: 60, resize: "vertical", fontFamily: "inherit" }}
+        placeholder="Текст (необязательно)"
+        value={body}
+        onChange={(e) => setBody(e.target.value)}
+      />
+      <select className="select" value={duration} onChange={(e) => setDuration(e.target.value)} style={{ alignSelf: "flex-start" }}>
+        <option value="1">1 час</option>
+        <option value="24">24 часа</option>
+        <option value="168">7 дней</option>
+        <option value="">Бессрочно (пока не удалю)</option>
+      </select>
+      <button className="btn btn-primary" onClick={create} disabled={busy} style={{ alignSelf: "flex-start" }}>Создать</button>
+
+      <div style={{ height: 1, background: "rgba(255,255,255,0.08)", margin: "6px 0" }} />
+
+      <div style={{ fontWeight: 700 }}>Все уведомления</div>
+      {items.map((n) => (
+        <div key={n.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", background: "var(--panel-2)", borderRadius: 8, padding: 12 }}>
+          <div>
+            <b>{n.title}</b>
+            {n.body && <div style={{ fontSize: 13, color: "var(--text-dim)", marginTop: 2 }}>{n.body}</div>}
+            <div style={{ fontSize: 11, color: "var(--text-dim)", marginTop: 4 }}>
+              {new Date(n.created_at).toLocaleString("ru-RU")} · {n.duration_hours == null ? "бессрочно" : `${n.duration_hours} ч.`}
+            </div>
+          </div>
+          <button className="notif-delete-btn" onClick={() => remove(n.id)}>✕</button>
+        </div>
+      ))}
+      {items.length === 0 && <div style={{ color: "var(--text-dim)" }}>Уведомлений пока нет</div>}
     </div>
   );
 }
