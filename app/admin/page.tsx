@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
-import { upload } from "@vercel/blob/client";
+import { upload as uploadToBlob } from "@vercel/blob/client";
 
 type ClientRow = {
   id: string;
@@ -417,10 +417,10 @@ function ReleasesPanel() {
       const sha256 = await sha256Hex(file);
 
       setStatus("Загружаю файл...");
-      const blob = await upload(file.name, file, {
+      const blob = await uploadToBlob(file.name, file, {
         access: "public",
         handleUploadUrl: "/api/admin/releases/blob-upload",
-        onUploadProgress: (event) => setProgress(Math.round(event.percentage)),
+        onUploadProgress: (event: { percentage: number }) => setProgress(Math.round(event.percentage)),
       });
 
       setStatus("Сохраняю запись о релизе...");
