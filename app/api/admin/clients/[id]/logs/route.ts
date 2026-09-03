@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 
-export async function GET(req: NextRequest, { params }: { params: { id: string } }) {
+export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params;
   const q = (req.nextUrl.searchParams.get("q") || "").trim();
   const twoDaysAgo = new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString();
 
@@ -9,7 +10,7 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
   let query = sb
     .from("domain_events")
     .select("id, domain, occurred_at")
-    .eq("client_id", params.id)
+    .eq("client_id", id)
     .gte("occurred_at", twoDaysAgo)
     .order("occurred_at", { ascending: false })
     .limit(500);
