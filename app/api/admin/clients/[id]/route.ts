@@ -7,7 +7,8 @@ import { supabaseAdmin } from "@/lib/supabaseAdmin";
 // отдельный явный эндпоинт, если понадобится).
 const ALLOWED_FIELDS = new Set(["mode", "is_active", "traffic_limit_bytes"]);
 
-export async function PATCH(req: NextRequest, { params }: { params: { id: string } }) {
+export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params;
   const body = await req.json();
   const patch: Record<string, unknown> = {};
   for (const key of Object.keys(body || {})) {
@@ -18,15 +19,16 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
   }
 
   const sb = supabaseAdmin();
-  const { error } = await sb.from("clients").update(patch).eq("id", params.id);
+  const { error } = await sb.from("clients").update(patch).eq("id", id);
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
   return NextResponse.json({ ok: true });
 }
 
-export async function DELETE(_req: NextRequest, { params }: { params: { id: string } }) {
+export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params;
   const sb = supabaseAdmin();
-  const { error } = await sb.from("clients").delete().eq("id", params.id);
+  const { error } = await sb.from("clients").delete().eq("id", id);
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   return NextResponse.json({ ok: true });
 }
