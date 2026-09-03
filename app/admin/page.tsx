@@ -420,6 +420,7 @@ function ReleasesPanel() {
       const blob = await uploadToBlob(file.name, file, {
         access: "public",
         handleUploadUrl: "/api/admin/releases/blob-upload",
+        multipart: true,
         onUploadProgress: (event: { percentage: number }) => setProgress(Math.round(event.percentage)),
       });
 
