@@ -1,0 +1,93 @@
+:root {
+  --bg: #0f1115;
+  --panel: #161920;
+  --panel-2: #1b1f28;
+  --text: #e8eaed;
+  --text-dim: #8b93a1;
+  --accent: #34c778;
+  --accent-dim: #1f7a48;
+  --danger: #e5484d;
+  --warn: #d9a441;
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  padding: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: -apple-system, "Segoe UI", Roboto, sans-serif;
+  font-size: 14px;
+}
+
+a { color: inherit; }
+
+input, select, button {
+  font-family: inherit;
+  font-size: inherit;
+}
+
+.input, .select {
+  background: var(--panel-2);
+  border: none;
+  box-shadow: inset 0 0 0 1px rgba(255,255,255,0.06);
+  border-radius: 8px;
+  padding: 9px 12px;
+  color: var(--text);
+  outline: none;
+}
+.input:focus, .select:focus {
+  box-shadow: inset 0 0 0 1px rgba(52,199,120,0.4), 0 0 0 3px rgba(52,199,120,0.12);
+}
+
+.btn {
+  border: none;
+  border-radius: 8px;
+  padding: 9px 16px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: filter 0.15s, transform 0.08s;
+}
+.btn:active { transform: scale(0.97); }
+.btn-primary { background: var(--accent); color: #08150e; }
+.btn-primary:hover { filter: brightness(1.08); }
+.btn-secondary { background: var(--panel-2); color: var(--text); }
+.btn-secondary:hover { background: #262b36; }
+.btn-danger { background: var(--danger); color: white; }
+.btn-danger:hover { filter: brightness(1.1); }
+
+.card {
+  background: var(--panel);
+  border-radius: 14px;
+  box-shadow: 0 1px 0 rgba(255,255,255,0.03) inset, 0 10px 30px rgba(0,0,0,0.25);
+  padding: 20px;
+}
+
+table { border-collapse: collapse; width: 100%; }
+th, td { text-align: left; padding: 10px 12px; font-size: 13px; }
+th { color: var(--text-dim); font-weight: 600; border-bottom: 1px solid rgba(255,255,255,0.06); }
+tr:hover td { background: var(--panel-2); cursor: pointer; }
+
+.badge { display: inline-flex; align-items: center; gap: 5px; padding: 3px 9px; border-radius: 999px; font-size: 11.5px; font-weight: 600; }
+.badge-on { background: rgba(52,199,120,0.14); color: var(--accent); }
+.badge-off { background: rgba(139,147,161,0.14); color: var(--text-dim); }
+.badge-warn { background: rgba(217,164,65,0.14); color: var(--warn); }
+.dot { width: 7px; height: 7px; border-radius: 50%; }
+
+.modal-backdrop {
+  position: fixed; inset: 0;
+  background: rgba(0,0,0,0.55);
+  display: flex; align-items: center; justify-content: center;
+  z-index: 100;
+}
+.modal {
+  background: var(--panel);
+  border-radius: 14px;
+  padding: 24px;
+  width: 420px;
+  max-width: 90vw;
+  max-height: 85vh;
+  overflow-y: auto;
+  box-shadow: 0 20px 60px rgba(0,0,0,0.5);
+}
