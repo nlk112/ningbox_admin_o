@@ -438,7 +438,8 @@ function ReleasesPanel() {
           endpoint: `https://${projectRef}.storage.supabase.co/storage/v1/upload/resumable`,
           retryDelays: [0, 3000, 5000, 10000, 20000],
           headers: {
-            authorization: `Bearer ${urlData.token}`,
+            apikey: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+            "x-signature": urlData.token,
             "x-upsert": "true",
           },
           uploadDataDuringCreation: true,
