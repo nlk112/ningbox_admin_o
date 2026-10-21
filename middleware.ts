@@ -20,6 +20,9 @@ export async function middleware(req: NextRequest) {
 
   const isLoginPage = req.nextUrl.pathname === "/login";
 
+  if (!valid && req.nextUrl.pathname.startsWith("/api/")) {
+    return NextResponse.json({ error: "Сессия истекла" }, { status: 401 });
+  }
   if (!valid && !isLoginPage) {
     const url = req.nextUrl.clone();
     url.pathname = "/login";

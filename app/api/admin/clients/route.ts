@@ -1,74 +1,53 @@
 import { NextRequest, NextResponse } from "next/server";
 import bcrypt from "bcryptjs";
-import { randomUUID } from "node:crypto";
+import { randomUUID, randomBytes } from "node:crypto";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
-
-const ONLINE_THRESHOLD_MS = 90_000; // чуть больше poll_interval воркера (15с)
+import { UNLIMITED, phoneDigits } from "@/lib/clients";
+import { COLS, shape } from "@/lib/shape";
 
 export async function GET() {
-  const sb = supabaseAdmin();
-
-  const { data: clients, error } = await sb
-    .from("clients")
-    .select("id, email, username, xray_uuid, is_active, mode, expires_at, traffic_limit_bytes")
-    .order("username", { ascending: true, nullsFirst: false });
+  const { data, error } = await supabaseAdmin().from("clients").select(COLS).order("created_at", { ascending: false });
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-
-  const { data: totals } = await sb.from("client_traffic_totals").select("client_id, total_bytes");
-  const { data: lastSeen } = await sb.from("client_last_seen").select("client_id, last_seen_at");
-
-  const totalsMap = new Map((totals || []).map((t: any) => [t.client_id, t.total_bytes]));
-  const seenMap = new Map((lastSeen || []).map((s: any) => [s.client_id, s.last_seen_at]));
-
-  const now = Date.now();
-  const result = (clients || []).map((c: any) => {
-    const seenAt = seenMap.get(c.id) || null;
-    const online = seenAt ? now - new Date(seenAt).getTime() < ONLINE_THRESHOLD_MS : false;
-    return {
-      ...c,
-      traffic_used_bytes: totalsMap.get(c.id) || 0,
-      last_seen_at: seenAt,
-      online,
-    };
-  });
-
-  return NextResponse.json({ clients: result });
+  return NextResponse.json({ clients: (data || []).map(shape) });
 }
 
+const password = () => randomBytes(6).toString("base64url");
+
 export async function POST(req: NextRequest) {
-  const body = await req.json();
-  const { username, password, traffic_limit_bytes } = body || {};
-
-  if (!username || typeof username !== "string") {
-    return NextResponse.json({ error: "username обязателен" }, { status: 400 });
-  }
-  if (!password || typeof password !== "string" || password.length < 4) {
-    return NextResponse.json({ error: "password обязателен (минимум 4 символа)" }, { status: 400 });
-  }
-
-  const xrayUuid = randomUUID();
-  const passwordHash = await bcrypt.hash(password, 10);
-  const email = `${username}@ningbox.local`; // email тут — просто внутренний идентификатор для xray, не для связи
+  const { phone, label, limit_gb, months } = await req.json();
+  const digits = phoneDigits(phone);
+  if (digits.length < 10) return NextResponse.json({ error: "Проверь номер телефона" }, { status: 400 });
 
   const sb = supabaseAdmin();
+  const { data: sample } = await sb.from("clients").select("phone").not("phone", "is", null).limit(1);
+  const plus = sample?.[0]?.phone?.startsWith("+");
+
+  const { data: dup } = await sb.from("clients").select("id").or(`phone.eq.${digits},phone.eq.+${digits},username.eq.${digits}`).limit(1);
+  if (dup?.length) return NextResponse.json({ error: "Клиент с таким номером уже есть" }, { status: 400 });
+
+  const expires = months ? new Date(new Date().setMonth(new Date().getMonth() + Number(months))).toISOString() : null;
+  const pass = password();
   const { data, error } = await sb
     .from("clients")
     .insert({
-      email,
-      username,
-      password_hash: passwordHash,
-      xray_uuid: xrayUuid,
+      email: `${digits}@ningbox.local`,
+      username: digits,
+      phone: plus ? "+" + digits : digits,
+      label: (label || "").trim() || null,
+      password_hash: await bcrypt.hash(pass, 10),
+      xray_uuid: randomUUID(),
       is_active: true,
       mode: "race",
-      traffic_limit_bytes: traffic_limit_bytes ?? null,
+      traffic_limit_bytes: limit_gb ? Math.round(Number(limit_gb) * 1024 ** 3) : UNLIMITED,
+      expires_at: expires,
     })
-    .select("id, email, username, xray_uuid")
+    .select(COLS)
     .single();
+  if (error) return NextResponse.json({ error: error.message }, { status: 400 });
 
-  if (error) {
-    const msg = error.message.includes("duplicate") ? "Такой username уже занят" : error.message;
-    return NextResponse.json({ error: msg }, { status: 400 });
+  if (!data.sub_token) {
+    data.sub_token = randomBytes(16).toString("hex");
+    await sb.from("clients").update({ sub_token: data.sub_token }).eq("id", data.id);
   }
-
-  return NextResponse.json({ client: data });
+  return NextResponse.json({ client: shape(data), password: pass });
 }

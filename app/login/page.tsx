@@ -1,10 +1,9 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
+import { Mark } from "@/components/ui";
 
 export default function LoginPage() {
-  const router = useRouter();
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [code, setCode] = useState("");
@@ -19,30 +18,37 @@ export default function LoginPage() {
       const res = await fetch("/api/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ username, password, code }),
+        body: JSON.stringify({ username, password, code: code.replace(/\s/g, "") }),
       });
       if (!res.ok) {
-        const data = await res.json().catch(() => ({}));
-        setError(data.error || "Ошибка входа");
+        setError((await res.json().catch(() => ({}))).error || "Ошибка входа");
         return;
       }
-      router.push("/admin");
-      router.refresh();
+      location.href = "/admin";
+    } catch {
+      setError("Нет связи с сервером");
     } finally {
       setLoading(false);
     }
   }
 
   return (
-    <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center" }}>
-      <form onSubmit={submit} className="card" style={{ width: 320, display: "flex", flexDirection: "column", gap: 12 }}>
-        <div style={{ fontSize: 18, fontWeight: 700, textAlign: "center", marginBottom: 8 }}>Ningbox Admin</div>
-        <input className="input" placeholder="Логин" value={username} onChange={(e) => setUsername(e.target.value)} autoComplete="username" />
-        <input className="input" type="password" placeholder="Пароль" value={password} onChange={(e) => setPassword(e.target.value)} autoComplete="current-password" />
-        <input className="input" placeholder="Код из Google Authenticator" value={code} onChange={(e) => setCode(e.target.value)} inputMode="numeric" maxLength={6} />
-        <button className="btn btn-primary" type="submit" disabled={loading}>{loading ? "Вход..." : "Войти"}</button>
-        {error && <div style={{ color: "var(--danger)", fontSize: 13, textAlign: "center" }}>{error}</div>}
+    <div className="login">
+      <form onSubmit={submit} aria-label="Вход">
+        <div className="brand" style={{ padding: "0 0 10px", fontSize: 20 }}>
+          <span className="logo" style={{ width: 34, height: 34, borderRadius: 10 }}>N</span>
+          <h1 style={{ fontSize: 20 }}>Ningbox <small style={{ color: "var(--muted)", fontWeight: 600 }}>admin</small></h1>
+        </div>
+        <label className="lbl" htmlFor="u">Логин</label>
+        <input id="u" className="input" value={username} onChange={(e) => setUsername(e.target.value)} autoComplete="username" autoFocus />
+        <label className="lbl" htmlFor="p">Пароль</label>
+        <input id="p" className="input" type="password" value={password} onChange={(e) => setPassword(e.target.value)} autoComplete="current-password" />
+        <label className="lbl" htmlFor="c">Код из приложения 2FA</label>
+        <input id="c" className="input" inputMode="numeric" autoComplete="one-time-code" placeholder="000 000" maxLength={7} value={code} onChange={(e) => setCode(e.target.value)} style={{ fontSize: 18, letterSpacing: ".3em" }} />
+        <button className="btn primary" type="submit" disabled={loading} style={{ marginTop: 14, padding: 13, fontSize: 15 }}>{loading ? "Вход…" : "Войти"}</button>
+        {error && <div className="note err" style={{ marginTop: 8, textAlign: "center" }}>{error}</div>}
       </form>
+      <Mark h={14} style={{ opacity: 0.3 }} />
     </div>
   );
 }
