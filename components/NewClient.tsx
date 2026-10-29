@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Client, fmtPhone, nameOf } from "@/lib/clients";
+import { Client, fmtPhone, happLink, nameOf } from "@/lib/clients";
 import { Icon, Qr, api, copy, useEsc } from "./ui";
 
 const LIMITS = [["", "Без лимита"], ["5", "5 ГБ"], ["50", "50 ГБ"], ["1024", "1 ТБ"]];
@@ -44,13 +44,13 @@ export default function NewClient({ onClose, onCreated }: { onClose: () => void;
           </div>
           {done.client.sub_url && (
             <div className="row" style={{ alignItems: "flex-start", gap: 14, flexWrap: "nowrap" }}>
-              <Qr text={done.client.sub_url} />
+              <Qr text={happLink(done.client)!} />
               <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 8 }}>
-                <div className="hint" style={{ fontWeight: 700 }}>Ссылка для Happ</div>
-                <code className="code">{done.client.sub_url}</code>
+                <div className="hint" style={{ fontWeight: 700 }}>{done.client.sub_crypt ? "Криптоссылка Happ 🔐" : "Ссылка для Happ"}</div>
+                <code className="code" style={{ maxHeight: 64, overflow: "hidden" }}>{happLink(done.client)}</code>
                 <div className="row">
-                  <button className="btn primary sm" onClick={() => copy(done.client.sub_url!, "Ссылка скопирована")}>Копировать</button>
-                  <button className="btn sm" onClick={() => copy("happ://add/" + done.client.sub_url, "happ:// ссылка скопирована")}>happ://</button>
+                  <button className="btn primary sm" onClick={() => copy(happLink(done.client)!, "Ссылка скопирована")}>Копировать</button>
+                  {done.client.sub_crypt && <button className="btn sm" onClick={() => copy(done.client.sub_url!, "Обычная ссылка скопирована")}>обычная</button>}
                 </div>
               </div>
             </div>

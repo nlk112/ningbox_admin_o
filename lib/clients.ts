@@ -25,7 +25,10 @@ export type Client = {
   ningbox_seen_at: string | null;
   sub_fetched_at: string | null;
   sub_user_agent: string | null;
+  sub_crypt: string | null;
 };
+
+export const happLink = (c: Client) => c.sub_crypt || c.sub_url;
 
 const PROTO: Record<string, string> = { reality: "Reality", cdn: "CDN", hysteria: "Hysteria" };
 

@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { Client, GB, UNLIMITED, ago, via, daysLeft, fmtBytes, fmtDate, fmtPhone, isUnlimited, nameOf, usage } from "@/lib/clients";
+import { Client, GB, UNLIMITED, ago, via, happLink, daysLeft, fmtBytes, fmtDate, fmtPhone, isUnlimited, nameOf, usage } from "@/lib/clients";
 import { Icon, LimitBar, Mark, Qr, api, copy, toast, useEsc } from "./ui";
 
 export default function ClientDrawer({ c, onClose, reload }: { c: Client; onClose: () => void; reload: () => Promise<void> }) {
@@ -33,19 +33,7 @@ export default function ClientDrawer({ c, onClose, reload }: { c: Client; onClos
         <div className="body">
           {tab === "logs" ? <><LogSwitch c={c} reload={reload} /><Logs id={c.id} /></> : (
             <>
-              {c.sub_url ? (
-                <section className="section" style={{ flexDirection: "row", gap: 14, alignItems: "center" }}>
-                  <Qr text={c.sub_url} />
-                  <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 8 }}>
-                    <div className="hint" style={{ fontWeight: 700 }}>Ссылка для Happ</div>
-                    <code className="code">{c.sub_url}</code>
-                    <div className="row">
-                      <button className="btn primary sm" onClick={() => copy(c.sub_url!, "Ссылка скопирована")}>Копировать</button>
-                      <button className="btn sm" onClick={() => copy("happ://add/" + c.sub_url, "happ:// ссылка скопирована")}>happ:// ссылка</button>
-                    </div>
-                  </div>
-                </section>
-              ) : <div className="note err">У клиента нет sub_token — ссылку Happ не собрать.</div>}
+              {c.sub_url ? <LinkBlock c={c} reload={reload} /> : <div className="note err">У клиента нет sub_token — ссылку Happ не собрать.</div>}
 
               <Traffic c={c} pct={pct} reload={reload} />
               <Expiry c={c} reload={reload} />
@@ -56,6 +44,26 @@ export default function ClientDrawer({ c, onClose, reload }: { c: Client; onClos
         </div>
       </aside>
     </div>
+  );
+}
+
+function LinkBlock({ c, reload }: { c: Client; reload: () => Promise<void> }) {
+  const { busy, run } = useAction(reload);
+  const link = happLink(c)!;
+  return (
+    <section className="section" style={{ flexDirection: "row", gap: 14, alignItems: "center" }}>
+      <Qr text={link} />
+      <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 8 }}>
+        <div className="hint" style={{ fontWeight: 700 }}>{c.sub_crypt ? "Криптоссылка Happ 🔐" : "Ссылка для Happ"}</div>
+        <code className="code" style={{ maxHeight: 64, overflow: "hidden" }}>{link}</code>
+        <div className="row">
+          <button className="btn primary sm" onClick={() => copy(link, "Ссылка скопирована")}>Копировать</button>
+          {c.sub_crypt
+            ? <button className="btn sm" onClick={() => copy(c.sub_url!, "Обычная ссылка скопирована")}>обычная</button>
+            : <button className="btn soft sm" disabled={!!busy} onClick={() => run("crypt", () => api(`/api/admin/clients/${c.id}/crypt`, "POST"), "Криптоссылка готова")}>🔐 Зашифровать</button>}
+        </div>
+      </div>
+    </section>
   );
 }
 
@@ -202,12 +210,16 @@ function LogSwitch({ c, reload }: { c: Client; reload: () => Promise<void> }) {
 function Logs({ id }: { id: string }) {
   const [q, setQ] = useState("");
   const [rows, setRows] = useState<{ id: number; domain: string; occurred_at: string }[] | null>(null);
-  const load = useCallback(async (s: string) => {
-    setRows(null);
+  const load = useCallback(async (s: string, silent = false) => {
+    if (!silent) setRows(null);
     try { setRows((await api(`/api/admin/clients/${id}/logs?q=${encodeURIComponent(s)}`)).events || []); }
-    catch (e: any) { toast(e.message); setRows([]); }
+    catch (e: any) { if (!silent) { toast(e.message); setRows([]); } }
   }, [id]);
-  useEffect(() => { const t = setTimeout(() => load(q.trim()), 300); return () => clearTimeout(t); }, [q, load]);
+  useEffect(() => {
+    const t = setTimeout(() => load(q.trim()), 300);
+    const i = setInterval(() => document.visibilityState === "visible" && load(q.trim(), true), 10_000);
+    return () => { clearTimeout(t); clearInterval(i); };
+  }, [q, load]);
 
   return (
     <>

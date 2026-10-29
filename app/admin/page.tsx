@@ -94,7 +94,7 @@ export default function AdminPage() {
         ) : tab === "overview" ? (
           <Overview clients={clients} open={open} goClients={() => go("clients")} />
         ) : tab === "clients" ? (
-          <Clients clients={clients} open={open} />
+          <Clients clients={clients} open={open} reload={load} />
         ) : null}
         {tab === "notifications" && <Notifications />}
 

@@ -4,6 +4,7 @@ import { randomUUID, randomBytes } from "node:crypto";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import { UNLIMITED, phoneDigits } from "@/lib/clients";
 import { COLS, shape } from "@/lib/shape";
+import { cryptClient } from "@/lib/crypt";
 
 export async function GET() {
   const { data, error } = await supabaseAdmin().from("clients").select(COLS).order("created_at", { ascending: false });
@@ -48,6 +49,11 @@ export async function POST(req: NextRequest) {
   if (!data.sub_token) {
     data.sub_token = randomBytes(16).toString("hex");
     await sb.from("clients").update({ sub_token: data.sub_token }).eq("id", data.id);
+  }
+  try {
+    data.sub_crypt = await cryptClient(data.id, data.sub_token);
+  } catch (e) {
+    console.error("crypt", e);
   }
   return NextResponse.json({ client: shape(data), password: pass });
 }

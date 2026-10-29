@@ -1,8 +1,8 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { Client, ago, via, daysLeft, fmtBytes, fmtDate, fmtPhone, isUnlimited, nameOf, phoneDigits, usage } from "@/lib/clients";
-import { Icon, LimitBar, copy } from "./ui";
+import { Client, ago, via, happLink, daysLeft, fmtBytes, fmtDate, fmtPhone, isUnlimited, nameOf, phoneDigits, usage } from "@/lib/clients";
+import { Icon, LimitBar, api, copy, toast } from "./ui";
 
 const FILTERS = {
   all: { label: "Все", fn: () => true },
@@ -44,7 +44,27 @@ function Status({ c }: { c: Client }) {
   );
 }
 
-export default function Clients({ clients, open }: { clients: Client[]; open: (c: Client) => void }) {
+export default function Clients({ clients, open, reload }: { clients: Client[]; open: (c: Client) => void; reload: () => Promise<void> }) {
+  const plain = clients.filter((c) => c.sub_url && !c.sub_crypt).length;
+  const [crypting, setCrypting] = useState(false);
+  async function cryptAll() {
+    setCrypting(true);
+    try {
+      let left = plain;
+      while (left > 0) {
+        const r = await api("/api/admin/clients/crypt-all", "POST");
+        if (r.failed) throw new Error(r.error || "ошибка генерации");
+        if (!r.ok) break;
+        left -= r.ok;
+      }
+      toast("Криптоссылки готовы");
+    } catch (e: any) {
+      toast(e.message);
+    } finally {
+      setCrypting(false);
+      reload();
+    }
+  }
   const [q, setQ] = useState("");
   const [f, setF] = useState<F>("all");
 
@@ -65,6 +85,7 @@ export default function Clients({ clients, open }: { clients: Client[]; open: (c
           <span className="muted" style={{ display: "flex" }}><Icon name="search" size={16} /></span>
           <input type="search" placeholder="Имя или номер" aria-label="Поиск" value={q} onChange={(e) => setQ(e.target.value)} />
         </label>
+        {plain > 0 && <button className="btn soft sm" disabled={crypting} onClick={cryptAll}>{crypting ? "Шифрую…" : `🔐 Криптоссылки (${plain})`}</button>}
         <div className="pills" role="group" aria-label="Фильтр">
           {(Object.keys(FILTERS) as F[]).map((k) => (
             <button key={k} className="pill" aria-pressed={f === k} onClick={() => setF(k)}>
@@ -89,7 +110,7 @@ export default function Clients({ clients, open }: { clients: Client[]; open: (c
                 <td style={{ whiteSpace: "nowrap" }}><Expiry c={c} /></td>
                 <td style={{ textAlign: "right" }}>
                   {c.sub_url && (
-                    <button className="icon-btn" title="Копировать ссылку Happ" aria-label="Копировать ссылку Happ" onClick={(e) => { e.stopPropagation(); copy(c.sub_url!, "Ссылка Happ скопирована"); }}>
+                    <button className="icon-btn" title="Копировать ссылку Happ" aria-label="Копировать ссылку Happ" onClick={(e) => { e.stopPropagation(); copy(happLink(c)!, "Ссылка Happ скопирована"); }}>
                       <Icon name="copy" size={16} />
                     </button>
                   )}
