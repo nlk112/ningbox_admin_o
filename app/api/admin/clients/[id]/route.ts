@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 
-const ALLOWED = new Set(["mode", "is_active", "traffic_limit_bytes", "label"]);
+const ALLOWED = new Set(["mode", "is_active", "traffic_limit_bytes", "label", "log_domains"]);
 
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;

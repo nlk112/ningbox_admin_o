@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { Client, ago, daysLeft, fmtBytes, fmtDate, fmtPhone, isUnlimited, nameOf, phoneDigits, usage } from "@/lib/clients";
+import { Client, ago, via, daysLeft, fmtBytes, fmtDate, fmtPhone, isUnlimited, nameOf, phoneDigits, usage } from "@/lib/clients";
 import { Icon, LimitBar, copy } from "./ui";
 
 const FILTERS = {
@@ -34,7 +34,14 @@ function LimitText({ c }: { c: Client }) {
 
 function Status({ c }: { c: Client }) {
   if (!c.is_active) return <span className="tag err">выключен</span>;
-  return <span className="status"><span className={`dot${c.online ? " on" : ""}`} />{ago(c.last_seen_at)}</span>;
+  const v = via(c);
+  return (
+    <span className="status">
+      <span className={`dot${c.online ? " on" : ""}`} />
+      {ago(c.last_seen_at)}
+      {v && <span className="via">{v}</span>}
+    </span>
+  );
 }
 
 export default function Clients({ clients, open }: { clients: Client[]; open: (c: Client) => void }) {

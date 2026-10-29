@@ -20,7 +20,27 @@ export type Client = {
   created_at: string;
   online: boolean;
   sub_url: string | null;
+  log_domains: boolean;
+  last_proto: string | null;
+  ningbox_seen_at: string | null;
+  sub_fetched_at: string | null;
+  sub_user_agent: string | null;
 };
+
+const PROTO: Record<string, string> = { reality: "Reality", cdn: "CDN", hysteria: "Hysteria" };
+
+export function appOf(ua: string | null) {
+  if (!ua) return "";
+  const name = ua.split(/[\/\s(]/)[0] || "";
+  const os = /iphone|ios|ipad/i.test(ua) ? "iOS" : /android/i.test(ua) ? "Android" : /windows/i.test(ua) ? "Windows" : /mac/i.test(ua) ? "macOS" : "";
+  return [name, os].filter(Boolean).join(" ");
+}
+
+export function via(c: Client) {
+  const nb = !!c.ningbox_seen_at && Date.now() - new Date(c.ningbox_seen_at).getTime() < 3 * 60_000;
+  const app = nb ? "Ningbox" : c.online ? appOf(c.sub_user_agent) : "";
+  return [app, c.online && c.last_proto ? PROTO[c.last_proto] || c.last_proto : ""].filter(Boolean).join(" · ");
+}
 
 export const phoneDigits = (s: string) => {
   let d = (s || "").replace(/\D/g, "");

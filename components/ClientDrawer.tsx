@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { Client, GB, UNLIMITED, ago, daysLeft, fmtBytes, fmtDate, fmtPhone, isUnlimited, nameOf, usage } from "@/lib/clients";
+import { Client, GB, UNLIMITED, ago, via, daysLeft, fmtBytes, fmtDate, fmtPhone, isUnlimited, nameOf, usage } from "@/lib/clients";
 import { Icon, LimitBar, Mark, Qr, api, copy, toast, useEsc } from "./ui";
 
 export default function ClientDrawer({ c, onClose, reload }: { c: Client; onClose: () => void; reload: () => Promise<void> }) {
@@ -19,7 +19,7 @@ export default function ClientDrawer({ c, onClose, reload }: { c: Client; onClos
             <div style={{ color: "var(--soft)", marginTop: 2 }}>{fmtPhone(c.phone) || c.email} · создан {fmtDate(c.created_at)}</div>
             <span className="status" style={{ marginTop: 8 }}>
               <span className={`dot${c.online ? " on" : ""}`} />
-              {ago(c.last_seen_at)} · {c.is_active ? "активен" : <span className="t-err">выключен</span>}
+              {ago(c.last_seen_at)}{via(c) && ` · ${via(c)}`} · {c.is_active ? "активен" : <span className="t-err">выключен</span>}
             </span>
           </div>
           <button className="icon-btn" aria-label="Закрыть" onClick={onClose}><Icon name="x" size={16} /></button>
@@ -31,7 +31,7 @@ export default function ClientDrawer({ c, onClose, reload }: { c: Client; onClos
         </div>
 
         <div className="body">
-          {tab === "logs" ? <Logs id={c.id} /> : (
+          {tab === "logs" ? <><LogSwitch c={c} reload={reload} /><Logs id={c.id} /></> : (
             <>
               {c.sub_url ? (
                 <section className="section" style={{ flexDirection: "row", gap: 14, alignItems: "center" }}>
@@ -180,6 +180,21 @@ function Danger({ c, reload, onClose }: { c: Client; reload: () => Promise<void>
         {c.is_active ? "Выключить доступ" : "Включить доступ"}
       </button>
       <button className="btn danger" onClick={() => setConfirm(true)}>Удалить</button>
+    </div>
+  );
+}
+
+function LogSwitch({ c, reload }: { c: Client; reload: () => Promise<void> }) {
+  const { busy, run } = useAction(reload);
+  const on = c.log_domains;
+  return (
+    <div className="switch">
+      <div>
+        <b>Сохранять домены (2 дня)</b>
+        <small>{c.last_proto === "hysteria" ? "Последнее подключение — Hysteria: там домены не пишутся, только Reality и CDN." : "Пишутся подключения через Reality и CDN."}</small>
+      </div>
+      <button className="toggle" role="switch" aria-checked={on} aria-label="Сохранять домены" disabled={!!busy}
+        onClick={() => run("log", () => api(`/api/admin/clients/${c.id}`, "PATCH", { log_domains: !on }), on ? "Запись доменов выключена" : "Запись доменов включена")} />
     </div>
   );
 }

@@ -1,7 +1,7 @@
 import { ONLINE_MS, SUB_BASE } from "@/lib/clients";
 
 export const COLS =
-  "id, email, label, username, phone, mode, is_active, expires_at, traffic_limit_bytes, total_uplink_bytes, total_downlink_bytes, last_seen_at, created_at, sub_token";
+  "id, email, label, username, phone, mode, is_active, expires_at, traffic_limit_bytes, total_uplink_bytes, total_downlink_bytes, last_seen_at, created_at, sub_token, log_domains, last_proto, ningbox_seen_at, sub_fetched_at, sub_user_agent";
 
 export function shape(c: any) {
   const down = Number(c.total_downlink_bytes) || 0;
