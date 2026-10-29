@@ -8,11 +8,13 @@ import Clients from "@/components/Clients";
 import ClientDrawer from "@/components/ClientDrawer";
 import NewClient from "@/components/NewClient";
 import Notifications from "@/components/Notifications";
+import Releases from "@/components/Releases";
 
 const TABS = [
   { id: "overview", title: "Обзор", icon: "grid" },
   { id: "clients", title: "Клиенты", icon: "user" },
   { id: "notifications", title: "Уведомления", icon: "bell" },
+  { id: "releases", title: "Релизы", icon: "box" },
 ] as const;
 type Tab = (typeof TABS)[number]["id"];
 
@@ -57,6 +59,7 @@ export default function AdminPage() {
   const current = clients?.find((c) => c.id === openId);
   const since = updated ? Math.round((Date.now() - updated.getTime()) / 60_000) : null;
   const title = TABS.find((t) => t.id === tab)!.title;
+  const own = tab === "notifications" || tab === "releases";
 
   return (
     <div className="shell">
@@ -78,25 +81,26 @@ export default function AdminPage() {
         <header className="head">
           <div>
             <h1>{title}</h1>
-            {tab !== "notifications" && <p>{since === null ? "Загрузка…" : since < 1 ? "Обновлено только что" : `Обновлено ${since} мин назад`}</p>}
+            {!own && <p>{since === null ? "Загрузка…" : since < 1 ? "Обновлено только что" : `Обновлено ${since} мин назад`}</p>}
           </div>
-          {tab !== "notifications" && (
+          {!own && (
             <button className="btn" onClick={load} disabled={loading} aria-label="Обновить">
               <Mark h={12} eq on={loading} /><span className="txt">Обновить</span>
             </button>
           )}
-          {tab !== "notifications" && <button className="btn primary" onClick={() => setCreating(true)}>+ Новый клиент</button>}
+          {!own && <button className="btn primary" onClick={() => setCreating(true)}>+ Новый клиент</button>}
 
         </header>
 
         {clients === null ? (
-          tab !== "notifications" && <div className="empty" style={{ padding: 60 }}><Mark h={22} eq on /></div>
+          !own && <div className="empty" style={{ padding: 60 }}><Mark h={22} eq on /></div>
         ) : tab === "overview" ? (
           <Overview clients={clients} open={open} goClients={() => go("clients")} />
         ) : tab === "clients" ? (
           <Clients clients={clients} open={open} reload={load} />
         ) : null}
         {tab === "notifications" && <Notifications />}
+        {tab === "releases" && <Releases />}
 
         <button className="mobile-logout" onClick={logout}>Выйти</button>
       </main>

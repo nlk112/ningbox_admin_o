@@ -157,6 +157,11 @@ h1, h2, h3 { margin: 0; font-weight: 800; }
 .notif { display: flex; gap: 12px; align-items: flex-start; padding: 14px; border-radius: 14px; background: rgba(255,255,255,.03); border: 1px solid var(--line); }
 .notif .t { flex: 1; min-width: 0; }
 .notif p { margin: 4px 0 0; color: var(--soft); white-space: pre-wrap; }
+.notif small a, .linkish { color: var(--soft); text-decoration: underline; text-underline-offset: 3px; background: none; border: 0; padding: 0; font: inherit; cursor: pointer; }
+.drop { display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 26px 16px; border-radius: 14px; border: 1.5px dashed var(--line2); background: rgba(255,255,255,.02); cursor: pointer; text-align: center; transition: border-color .2s, background .2s; }
+.drop:hover { border-color: var(--violet); background: rgba(124,92,255,.06); }
+.drop.has { border-style: solid; border-color: rgba(124,92,255,.5); }
+.rel-now { margin-left: 8px; padding: 2px 8px; border-radius: 99px; font-size: 11px; font-weight: 800; color: #fff; background: var(--grad); vertical-align: 2px; }
 .notif small { display: block; margin-top: 6px; color: var(--muted); font-size: 12px; }
 
 /* login */
